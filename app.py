@@ -1,13 +1,12 @@
-from fastapi import FastAPI, Form
+from fastapi import FastAPI, Form, BackgroundTasks, Request
 from fastapi.responses import HTMLResponse, StreamingResponse
-from fastapi import BackgroundTasks
 from fastapi.templating import Jinja2Templates
 import subprocess
 import logging
 import time
-from typing import List
 import threading
-from fastapi import Request
+import os
+import platform
 
 # Set up logging to print to the console
 logger = logging.getLogger("signal_cli")
@@ -34,12 +33,39 @@ stored_numbers = []
 stored_message = ""
 current_number = ""  # Global variable to track the current phone number being processed
 
+# Hardcoded Oxylabs credentials
+OXYLABS_USERNAME = "nordicpuffs@outlook.com"
+OXYLABS_PASSWORD = "Ha2tk4bgsg"
+
+
+# Function to construct Oxylabs Residential Proxy URL
+def get_oxylabs_proxy():
+    proxy_url = f"http://{OXYLABS_USERNAME}:{OXYLABS_PASSWORD}@pr.oxylabs.io:7777"
+    return proxy_url
+
 
 def send_message_via_signal_cli(phone_number: str, message: str):
+    proxy = get_oxylabs_proxy()
+
+    if not proxy:
+        logger.error(f"Failed to obtain a proxy. Cannot send message to {phone_number}.")
+        return False, "Failed to obtain proxy"
+
     try:
-        command = f'cmd /c C:\\signal\\bin\\signal-cli -u +923325278158 send -m "{message}" {phone_number}'
-        logger.info(f"Executing command: {command}")
-        result = subprocess.run(command, capture_output=True, text=True, shell=True)
+        # Check the OS and use appropriate command prefix
+        if platform.system() == "Windows":
+            command = f'cmd /c C:\\signal\\bin\\signal-cli -u +923325278158 send -m "{message}" {phone_number}'
+        else:
+            command = f'C:\\signal\\bin\\signal-cli -u +923325278158 send -m "{message}" {phone_number}'
+
+        logger.info(f"Executing command with proxy: {proxy}")
+
+        # Use proxy with subprocess
+        env = os.environ.copy()
+        env["http_proxy"] = proxy
+        env["https_proxy"] = proxy
+
+        result = subprocess.run(command, capture_output=True, text=True, shell=True, env=env)
 
         if result.returncode == 0:
             logger.info(f"Message sent successfully to {phone_number}")
